@@ -18,42 +18,44 @@ from queue import Queue
 import matplotlib.patches as patches
 from math import pi
 
-def plot_waves(size_fig=3):
-    maxnumber=4
-    fig, ax=plt.subplots(maxnumber, figsize=(size_fig,3))
-    xdata=np.linspace(0, pi, num=200)
-    
-    for w in range(1,maxnumber+1):
-        ax[maxnumber-w].plot(xdata, np.sin(xdata*w), color='black' )
-        ax[maxnumber-w].plot(xdata, -1*np.sin(xdata*w), color='black' )
-        ax[maxnumber-w].plot(xdata, [0]*len(xdata), '--', color='black' )
-        ax[maxnumber-w].set_xlim(0, pi)
-        ax[maxnumber-w].axis('off')
-        ax[maxnumber-w].text(0,0.5, f'n={w}')
-        
-    fig.patches.append(
-        patches.Rectangle(
-            (0, 0.0),  # Lower-left corner in figure coords (0 to 1)
-            0.125, 1,    # Width and height in figure coords
-            transform=fig.transFigure,
-            facecolor='black',
-            alpha=0.2,
-            edgecolor='black'
-        )
-    )
-    fig.patches.append(
-        patches.Rectangle(
-            (0.9, 0),  # Lower-left corner in figure coords (0 to 1)
-            0.125, 1,    # Width and height in figure coords
-            transform=fig.transFigure,
-            facecolor='black',
-            alpha=0.2,
-            edgecolor='black'
-        )
-    )
-    
-    return fig, ax
+animations = []
 
+def plot_waves_animated(size_fig=3):
+    maxnumber = 3
+    fig, axes = plt.subplots(maxnumber, figsize=(size_fig, 3), sharex=True)
+
+    x = np.linspace(0, pi, 200)
+    lines = []
+
+    for w in range(1, maxnumber+1):
+        ax = axes[maxnumber-w]
+        line, = ax.plot([], [], color='black')
+        lines.append((line, w))
+        ax.plot(x, [0]*len(x), '--', color='black')
+        ax.set_xlim(0, pi)
+        ax.set_ylim(-1.2, 1.2)
+        ax.axis('off')
+        ax.text(0, 0.7, f'n={w}')
+
+    # Add edge shading as before
+    fig.patches.append(
+        patches.Rectangle((0, 0), 0.125, 1, transform=fig.transFigure,
+                          facecolor='black', alpha=0.2, edgecolor='black'))
+    fig.patches.append(
+        patches.Rectangle((0.9, 0), 0.125, 1, transform=fig.transFigure,
+                          facecolor='black', alpha=0.2, edgecolor='black'))
+
+    # Animation function
+    def animate(frame):
+        t = frame / 30  # 30 FPS approx
+        for line, w in lines:
+            omega = 3*2 * pi * w / size_fig  # proportional to f_n
+            y = np.sin(w * x) * np.cos(omega * t)
+            line.set_data(x, y)
+        return [line for line, _ in lines]
+
+    ani = animation.FuncAnimation(fig, animate, frames=200, interval=33, blit=True)
+    return fig, ani
 
 def record_and_plot(root,print_queue):    
     # ----- Configuration -------------------------------------------------
@@ -129,19 +131,29 @@ def record_and_plot(root,print_queue):
         sd.wait()
 
 def plotwaves():
-    sizes=[3, 9]
+    sizes = [3,6, 9]
     for n in sizes:
-        fig, ax=plot_waves(size_fig=n)
+        fig, ani = plot_waves_animated(size_fig=n)
+        animations.append(ani)  # Prevent garbage collection
+
         window = Tk.Toplevel(root)
-        window.title(f'Length = {n}')
-    
-        canvas1 = FigureCanvasTkAgg(fig, master=window)
-        canvas1.draw()
-        canvas1.get_tk_widget().pack()
-    
-        toolbar = NavigationToolbar2Tk(canvas1, window)
+        window.title(f'Animated Standing Waves (Length = {n})')
+
+        canvas = FigureCanvasTkAgg(fig, master=window)
+        canvas.draw()
+        canvas.get_tk_widget().pack()
+
+        toolbar = NavigationToolbar2Tk(canvas, window)
         toolbar.update()
-        plt.close(fig)
+
+        # Define a separate updater for this window's animation
+        def make_updater(local_ani=ani, local_win=window):
+            def update_animation():
+                local_ani._step()
+                local_win.after(33, update_animation)
+            return update_animation
+
+        window.after(0, make_updater())
     
 
 
@@ -181,3 +193,4 @@ button_waves=Tk.Button(root, text='Create Diagram', command=plotwaves)
 button_waves.pack()
 workerthread.start()
 root.mainloop()
+
